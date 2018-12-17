@@ -1,0 +1,58 @@
+- name: "Check if Driver {{ item.driver_name }} is installed"
+  win_shell: |
+    $print_env = "{{ item.driver_setup.printer_env }}"
+    $driver_name = "{{ item.driver_setup.name }}"
+    $printer_environment = "Windows x64";
+    if($print_env -eq "x86"){ $printer_environment = "Windows NT x86"};
+    $x = Get-PrinterDriver -Name $driver_name -PrinterEnvironment $printer_environment;
+    if($x)
+    {
+      @{NotFound = $false } | ConvertTo-JSON;
+     
+    }else{
+      @{NotFound = $true} | ConvertTo-JSON;
+    }
+  changed_when: "(is_driver_installed.stdout | from_json).NotFound"
+  register: is_driver_installed
+  failed_when: none
+
+- name: "Install Printer Driver Package {{ item.driver_name }}"
+  block:
+    - name: "Create temporary folder for Printer Driver Package {{ item.driver_name }} download"
+      win_tempfile:
+        state: directory
+        suffix: "{{ item.driver_name }}"
+      register: driver_temp
+
+    - name: "Download Printer Driver Package {{ item.driver_name }}"
+      win_get_url:
+        url: "{{ item.download_url }}"
+        dest: "{{ driver_temp.path}}/{{ item.driver_name }}.zip"
+        url_username: "{{ item.download_url_user }}"
+        url_password: "{{ item.download_url_password }}"
+
+    - name: "Extract Printer Driver Package {{ item.driver_name }}"
+      win_unzip:
+        src: "{{ driver_temp.path}}/{{ item.driver_name }}.zip"
+        dest: "{{ driver_store }}/{{ item.driver_name }}"
+      
+    - name: "Ensure Printer Driver Package {{ item.driver_name }} is installed"
+      win_printer_driver:
+        inf_file: "{{ driver_store }}/{{ item.driver_name }}/{{ item.driver_setup.inf_file }}"
+        driver_name: "{{ item.driver_setup.name }}"
+        printer_env: "{{ item.driver_setup.printer_env | default('x64') }}"
+
+  rescue:
+    - name: "Cleanup Printer Driver Package Folder {{ item.driver_name }} on error"
+      win_file:
+        path: "{{ driver_store }}/{{ item.driver_name }}"
+        state: absent
+    - fail:
+        msg: "Error on Driver Install"
+
+  always:
+    - name: "Cleanup Temporary Download Folder from Printer Driver Package {{ item.driver_name }}"
+      win_file:
+        path: "{{ driver_temp.path }}"
+        state: absent
+  when: is_driver_installed.changed

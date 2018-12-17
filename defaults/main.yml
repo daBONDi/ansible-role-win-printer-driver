@@ -1,0 +1,4 @@
+# Define where to store the Drivers localy
+# Usaly defined in Hostvar print_service.driver_store
+
+driver_store: "{{ print_service.driver_store | default('c:/data/drivers') }}"

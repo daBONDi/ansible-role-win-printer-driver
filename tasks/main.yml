@@ -1,0 +1,3 @@
+# Ensure role parameters
+- include_tasks: install_driver.yml
+  with_items: "{{ printer_drivers }}"
